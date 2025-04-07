@@ -8,8 +8,23 @@ import { NoteEditor } from './NoteEditor';
 function App() { 
   const [notes, setNotes] = useState<Note[]>([]);
   const [previewMode, setPreviewMode] = useState(false);
+  const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
+
   useEffect(() => {
     fetchNotes();
+
+    const subscription = supabase
+      .channel("note")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "note" },
+        fetchNotes
+      )
+      .subscribe();
+    
+      return () => { 
+        supabase.removeChannel(subscription);
+      }
   }, []);
 
   const fetchNotes = async () => {
@@ -34,6 +49,28 @@ function App() {
     fetchNotes();
   };
 
+  const handleContentChange = async (content: string) => {
+    const { error } = await supabase
+      .from("note")
+      .update({ content })
+      .eq("id", notes[0].id);
+
+    if (error) console.error("Error updating note", error);
+    
+    fetchNotes();
+  };
+
+  const handleChangeTitle = async (title: string) => {
+    const { error } = await supabase
+      .from("note")
+      .update({ title })
+      .eq("id", currentNoteId)
+    
+    if (error) {
+      console.error("Error updating note", error);
+    }
+  };
+
   return (
     <div className="flex h-screen">
       <div className="w-[300px] bg-gray-100 p-4">
@@ -45,7 +82,12 @@ function App() {
             新規作成
           </button>
         </div>
-        <NoteList notes={notes} />
+        <NoteList
+          notes={notes}
+          selectNoteId={currentNoteId}
+          onSelect={(note) => setCurrentNoteId(note.id)}
+          handleChangeTitle={handleChangeTitle}
+        />
       </div>
       <div className="flex-1 p-4">
         <div className="mb-4 flex justify-between">
@@ -57,7 +99,13 @@ function App() {
             {previewMode ? "Edit" : "Preview"}
           </button>
         </div>
-        <NoteEditor content={notes[0]?.content} isPreviewMode={previewMode} />
+        <NoteEditor
+          content={
+            notes.find((note) => note.id === currentNoteId)?.content || ""
+          }
+          isPreviewMode={previewMode}
+          onContentChange={handleContentChange}
+        />
       </div>
     </div>
   );
