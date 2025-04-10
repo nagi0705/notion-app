@@ -22,26 +22,29 @@ function App() {
       )
       .subscribe();
     
-      return () => { 
-        supabase.removeChannel(subscription);
-      }
+    return () => { 
+      supabase.removeChannel(subscription);
+    }
   }, []);
 
   const fetchNotes = async () => {
     const { data, error } = await supabase
       .from("note")
       .select('*')
-      .order("id", { ascending: false })
-    if (error) console.error("Error fetching notes", error);
-    else setNotes(data)
+      .order("id", { ascending: false });
+    if (error) {
+      console.error("Error fetching notes", error);
+    } else {
+      setNotes(data);
+    }
   };
 
   const handleNewNote = async () => {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from("note")
       .insert({ title: "新規ノート", content: "" });
     
-    if (error || data) {
+    if (error) {
       console.error(error);
       return;
     }
@@ -49,22 +52,33 @@ function App() {
     fetchNotes();
   };
 
+  /**
+   * NoteEditorから呼ばれる「本文更新」処理。
+   * IME変換途中では呼ばれず、CompositionEndで確定したタイミングなどで更新される。
+   */
   const handleContentChange = async (content: string) => {
+    if (currentNoteId == null) return;
+
     const { error } = await supabase
       .from("note")
       .update({ content })
-      .eq("id", notes[0].id);
+      .eq("id", currentNoteId);
 
-    if (error) console.error("Error updating note", error);
-    
-    fetchNotes();
+    if (error) {
+      console.error("Error updating note", error);
+    }
+
+    // 入力のたびのfetchNotes()呼び出しはしない
+    // → IME変換中に文字がリセットされるのを防止
   };
 
   const handleChangeTitle = async (title: string) => {
+    if (currentNoteId == null) return;
+
     const { error } = await supabase
       .from("note")
       .update({ title })
-      .eq("id", currentNoteId)
+      .eq("id", currentNoteId);
     
     if (error) {
       console.error("Error updating note", error);
@@ -73,6 +87,7 @@ function App() {
 
   return (
     <div className="flex h-screen">
+      {/* ノート一覧サイドバー */}
       <div className="w-[300px] bg-gray-100 p-4">
         <div className='mb-4'>
           <button
@@ -89,6 +104,8 @@ function App() {
           handleChangeTitle={handleChangeTitle}
         />
       </div>
+      
+      {/* メインエリア */}
       <div className="flex-1 p-4">
         <div className="mb-4 flex justify-between">
           <h2 className="text-lg font-bold">Note Editor</h2>
@@ -99,6 +116,7 @@ function App() {
             {previewMode ? "Edit" : "Preview"}
           </button>
         </div>
+
         <NoteEditor
           content={
             notes.find((note) => note.id === currentNoteId)?.content || ""
